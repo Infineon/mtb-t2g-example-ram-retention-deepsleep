@@ -2,19 +2,19 @@
 
 # RAM Retention in DeepSleep Power Mode
 
-**This code example demonstrates how to set RAM into Retention mode before entering DeepSleep mode.**  
+**This code example demonstrates how to set RAM into Retention mode before entering DeepSleep power mode.**  
 
 ## Device
 
 The device used in this code example (CE) is:
 
-- [TRAVEO™ T2G CYT4BF Series](https://www.infineon.com/cms/en/product/microcontroller/32-bit-traveo-t2g-arm-cortex-microcontroller/32-bit-traveo-t2g-arm-cortex-for-body/traveo-t2g-cyt4bf-series/)
+- [TRAVEO™ T2G CYT4DN Series](https://www.infineon.com/cms/en/product/microcontroller/32-bit-traveo-t2g-arm-cortex-microcontroller/32-bit-traveo-t2g-arm-cortex-for-cluster/traveo-t2g-cyt4dn/)
 
 ## Board
 
 The board used for testing is:
 
-- TRAVEO™ T2G evaluation kit ([KIT_T2G-B-H_EVK](https://www.infineon.com/cms/en/product/evaluation-boards/kit_t2g-b-h_evk/), [KIT_T2G-B-H_LITE](https://www.infineon.com/cms/en/product/evaluation-boards/kit_t2g-b-h_lite/))
+- TRAVEO&trade; T2G Cluster 6M Lite Kit ([KIT_T2G_C-2D-6M_LITE](https://www.infineon.com/cms/en/product/evaluation-boards/kit_t2g_c-2d-6m_lite/))
 
 ## Scope of work
 TRAVEO™ T2G MCUs provides the Static RAM (SRAM) Retention function in DeepSleep mode. This code example writes known data into SRAM Controller 1 and sets the SRAM into Retention mode before entering DeepSleep mode. After wakeup from DeepSleep mode, data written to SRAM Controller 1 is read back and compared to the data written before entering DeepSleep mode to check if the data is retained.
@@ -23,7 +23,7 @@ TRAVEO™ T2G MCUs provides the Static RAM (SRAM) Retention function in DeepSlee
 
 **SRAM Interface**  
 
-- Optional memory size: 1024 KB
+- Optional memory size: 640 KB
 - Advanced eXtensible Interface (AXI) bus interfaces:
     - In the fast clock domain for the CM7 CPUs
 - Advanced High-performance Bus (AHB)-Lite bus interface:
@@ -38,7 +38,7 @@ TRAVEO™ T2G MCUs provides the Static RAM (SRAM) Retention function in DeepSlee
 
 **Device Power Modes**  
 
-The TVII-B-H device can operate in different power modes that are intended to minimize the average power consumption in an application. The power modes supported by TVII-B-H in the order of decreasing power consumption are:
+The TVII-C device can operate in different power modes that are intended to minimize the average power consumption in an application. The power modes supported by TVII-C in the order of decreasing power consumption are:
 <table border="1" style="border-collapse: collapse">
 <thead><tr>
 <th>Power Mode</th><th>Description</th><th>Entry Condition</th><th>Wakeup Source</th><th>Wakeup Action</th></tr></thead>
@@ -53,17 +53,20 @@ modes.</td><td>Not applicable</td><td>Not applicable</td></tr>
 </tbody>
 </table>
 
-More details can be found in [Technical Reference Manual (TRM)](https://www.infineon.com/dgdl/?fileId=5546d4627600a6bc017600bfae720007), [Registers TRM](https://www.infineon.com/dgdl/?fileId=5546d4627600a6bc017600be2aef0004) and [Data Sheet](https://www.infineon.com/dgdl/?fileId=5546d46275b79adb0175dc8387f93228).
+More details can be found in:
+- TRAVEO&trade; T2G CYT4DN
+  - [Technical Reference Manual (TRM)](https://www.infineon.com/dgdl/?fileId=8ac78c8c8691902101869f03007d2d87)
+  - [Registers TRM](https://www.infineon.com/dgdl/?fileId=8ac78c8c8691902101869ef098052d79)
+  - [Data Sheet](https://www.infineon.com/dgdl/?fileId=8ac78c8c869190210186f0cceff43fd0)
 
 ## Hardware setup
 
 This CE has been developed for:
-- TRAVEO™ T2G evaluation kit ([KIT_T2G-B-H_EVK](https://www.infineon.com/cms/en/product/evaluation-boards/kit_t2g-b-h_evk/))<BR>
-<img src="./images/KIT_T2G-B-H_EVK.gif"/><BR>
-No changes are required from the board's default settings.
+- TRAVEO&trade; T2G Cluster 6M Lite Kit ([KIT_T2G_C-2D-6M_LITE](https://www.infineon.com/cms/en/product/evaluation-boards/kit_t2g_c-2d-6m_lite/))<BR>
 
-- TRAVEO™ T2G Body High Lite evaluation kit ([KIT_T2G-B-H_LITE](https://www.infineon.com/cms/en/product/evaluation-boards/kit_t2g-b-h_lite/))<BR>
-<img src="./images/KIT_T2G-B-H_LITE.gif"/><BR>
+**Figure 1. KIT_T2G_C-2D-6M_LITE (Top View)**
+
+<img src="./images/kit_t2g_c-2d-6m_lite.png" width="800" /><BR>
 No changes are required from the board's default settings.
 
 ## Implementation
@@ -74,14 +77,14 @@ This multi-core application has the main function running on the CM7_0 core.
 **Setting up RTC as wakeup source**  
 
 This example uses RTC (Real Time Clock) as a wakeup source from DeepSleep mode. The RTC is configured and controlled by HAL (Hardware Abstraction Layer) functions.
-- After initializing the RTC by <a href="https://infineon.github.io/mtb-hal-cat1/html/group__group__hal__rtc.html#ga913818691e0a742dea9172d1dc255f5b"><i>cyhal_rtc_init()</i></a>, <a href="https://infineon.github.io/mtb-hal-cat1/html/group__group__hal__rtc.html#ga7cab520a921b70bcdd7794d08c14ce84"><i>cyhal_rtc_write_direct()</i></a> sets the current time and date
-- <a href="https://infineon.github.io/mtb-hal-cat1/html/group__group__hal__rtc.html#ga92d82cf6e7ca376c5a41004d2d67cd4d"><i>cyhal_rtc_enable_event()</i></a> enables RTC events that generate RTC interrupts at the specified timing
-- In *SetRtcAlarmDateTime()* function, <a href="https://infineon.github.io/mtb-hal-cat1/html/group__group__hal__rtc.html#ga2b3a85af9b9b878e8cae824d5f847b88"><i>cyhal_rtc_set_alarm_by_seconds()</i></a> sets the alarm event occurrence after 10 seconds
+- After initializing the RTC by <a href="https://infineon.github.io/mtb-pdl-cat1/pdl_api_reference_manual/html/group__group__rtc__general__functions.html#ga5e627b3c4c82ee379c04dcb7e754f7d8"><i>Cy_RTC_SelectClockSource()</i></a>, <a href="https://infineon.github.io/mtb-pdl-cat1/pdl_api_reference_manual/html/group__group__rtc__general__functions.html#ga4c6aca12f876f94707818e7a5dcdbf82"><i>Cy_RTC_Init()</i></a> sets the current time and date
+- <a href="https://infineon.github.io/mtb-pdl-cat1/pdl_api_reference_manual/html/group__group__rtc__interrupt__functions.html#gaf2ab28f85a042dc1c68b35e0c809eade"><i>Cy_RTC_SetInterruptMask()</i></a> enables RTC events that generate RTC interrupts at the specified timing
+- In *SetRtcAlarmDateTime()* function, <a href="https://infineon.github.io/mtb-pdl-cat1/pdl_api_reference_manual/html/group__group__rtc__alarm__functions.html#ga92807dc709c679c70c07d44cf0331a94"><i>Cy_RTC_SetAlarmDateAndTime()</i></a> sets the alarm event occurrence after 10 seconds
 
 **SRAM configuration and transition to DeepSleep mode**  
 
-- After in system initialization is completed, known data is written to SRAM_CONTROLLER1 memory location (0x28080000 to 0x280BFFFF). In main function, Retention mode is enabled before entering DeepSleep mode, and after wakeup from DeepSleep mode via RTC Interrupt (every 10 second interrupt is triggered), SRAM is put in enabled mode. These operations can be done by setting *CPUSS_RAM1_PWR_CTL_PWR_MODE* field.
-- The transition to DeepSleep mode is made by a call to <a href="https://infineon.github.io/mtb-hal-cat1/html/group__group__hal__syspm.html#ga0afe7e58c0df4a2eda5010ac628ea981"><i>cyhal_syspm_deepsleep()</i></a>, a HAL function, which manages whether the current MCU state meets the conditions for transition to DeepSleep. In this example, the TX FIFO of the UART used for string output to the terminal should be empty, so <a href="https://infineon.github.io/mtb-hal-cat1/html/group__group__hal__system.html#ga5f450769c1207d98134a9ced39adfdda"><i>cyhal_system_delay_ms()</i></a> is used to wait until it becomes empty.
+- After in system initialization is completed, known data is written to SRAM_CONTROLLER1 memory location (0x28040000 to 0x2807FFFF). In main function, Retention mode is enabled before entering DeepSleep mode, and after wakeup from DeepSleep mode via RTC Interrupt (every 10 second interrupt is triggered), SRAM is put in enabled mode. These operations can be done by setting *CPUSS_RAM1_PWR_CTL_PWR_MODE* field.
+- The transition to DeepSleep mode is made by a call to <a href="https://infineon.github.io/mtb-pdl-cat1/pdl_api_reference_manual/html/group__group__syspm__functions__power.html#ga5150c28fe4d2626720c1fbf74b3111ca"><i>Cy_SysPm_CpuEnterDeepSleep()</i></a>, a HAL function, which manages whether the current MCU state meets the conditions for transition to DeepSleep. In this example, the TX FIFO of the UART used for string output to the terminal should be empty, so <a href="https://infineon.github.io/mtb-pdl-cat1/pdl_api_reference_manual/html/group__group__syslib__functions.html#gaad1c32546fdb0e3c6fa8b46fb95843b5"><i>Cy_SysLib_Delay()</i></a> is used to wait until it becomes empty.
 - After wakeup, the data written in SRAM_CONTROLLER1 memory location is read back to check if data is retained or not. Result is then printed on the terminal and the loop starts again.
 
 **Miscellaneous settings**  
@@ -91,7 +94,7 @@ This example uses RTC (Real Time Clock) as a wakeup source from DeepSleep mode. 
   - Calling <a href="https://infineon.github.io/retarget-io/html/group__group__board__libs.html#ga21265301bf6e9239845227c2aead9293"><i>cy_retarget_io_init()</i></a> function to use UART as STDIN / STDOUT
     - Initialize the port defined as *CYBSP_DEBUG_UART_TX* as UART TX, defined as *CYBSP_DEBUG_UART_RX* as UART RX (these pins are connected to KitProg3 COM port)
     - The serial port parameters become to 8N1 and 115200 baud
-  - In *PrintDebugString()* function, the current time obtained by <a href="https://infineon.github.io/mtb-hal-cat1/html/group__group__hal__rtc.html#ga5c3f15f870f2ecfb4a8a03a58d1eaa5f"><i>cyhal_rtc_read()</i></a> is output to the terminal along with a debug string
+  - In *PrintDebugString()* function, the current time obtained by <a href="https://infineon.github.io/mtb-pdl-cat1/pdl_api_reference_manual/html/group__group__rtc__general__functions.html#gace30abad5d40fc768d7c4fc14e84e847"><i>Cy_RTC_GetDateAndTime()</i></a> is output to the terminal along with a debug string
 
 **Cores other than CM7_0**
 
@@ -99,7 +102,7 @@ Since all cores must transition to DeepSleep for the entire system becomes DeepS
 
 ## Run and Test
 
-For this CE, a terminal emulator is required for displaying outputs. Install a terminal emulator if you do not have one. Instructions in this document use [Tera Term](https://ttssh2.osdn.jp/index.html.en).
+For this CE, a terminal emulator is required for displaying outputs. Install a terminal emulator if you do not have one. Instructions in this document use [Tera Term](https://teratermproject.github.io/index-en.html).
 
 After code compilation, perform the following steps to flashing the device:
 
@@ -112,7 +115,7 @@ After code compilation, perform the following steps to flashing the device:
 
     - *Terminal output on program startup*<BR><img src="./images/terminal.PNG" width="640" />
 
-5. You can debug the example to step through the code. In the IDE, use the **[Project Name] Debug (KitProg3_MiniProg4)** configuration in the **Quick Panel**. For details, see the "Program and debug" section in the [Eclipse IDE for ModusToolbox™ software user guide](https://www.infineon.com/dgdl/?fileId=8ac78c8c8386267f0183a8d7043b58ee).
+5. You can debug the example to step through the code. In the IDE, use the **[Project Name] Debug (KitProg3_MiniProg4)** configuration in the **Quick Panel**. For details, see the "Program and debug" section in the [Eclipse IDE for ModusToolbox™ software user guide](https://www.infineon.com/dgdl/?fileId=8ac78c8c8929aa4d0189bd07dd6113f9).
 
 **Note:** **(Only while debugging)** On the CM7 CPU, some code in *main()* may execute before the debugger halts at the beginning of *main()*. This means that some code executes twice: once before the debugger stops execution, and again after the debugger resets the program counter to the beginning of *main()*. See [KBA231071](https://community.infineon.com/t5/Knowledge-Base-Articles/PSoC-6-MCU-Code-in-main-executes-before-the-debugger-halts-at-the-first-line-of/ta-p/253856) to learn about this and for the workaround.
 
@@ -120,9 +123,10 @@ After code compilation, perform the following steps to flashing the device:
 
 Relevant Application notes are:
 
-- AN235305 - GETTING STARTED WITH TRAVEO™ T2G FAMILY MCUS IN MODUSTOOLBOX™
-- [AN220222](https://www.infineon.com/dgdl/?fileId=5546d462749a7c2d01749b357cbc0ce6) - Low Power Mode Procedure in Traveo II Family
-- [AN220152](https://www.infineon.com/dgdl/Infineon-Infineon-How-to-Retain-RAM-Data-with-Software-Reset-and-Low-Power-Mode-Transition-in-Traveo-II-Family-ApplicationNotes-v01_00-EN.pdf?fileId=5546d462749a7c2d01749b35f7020cfa) - How to Retain RAM Data in Reset Procedure and Low-Power Mode Transition in Traveo II Family
+- [AN235305](https://www.infineon.com/dgdl/?fileId=8ac78c8c8b6555fe018c1fddd8a72801) - Getting started with TRAVEO&trade; T2G family MCUs in ModusToolbox&trade;
+- [AN220222](https://www.infineon.com/dgdl/?fileId=5546d462749a7c2d01749b357cbc0ce6) - Low Power Mode Procedure in TRAVEO&trade; T2G Family
+- [AN220152](https://www.infineon.com/dgdl/?fileId=5546d462749a7c2d01749b35f7020cfa) - How to Retain RAM Data in Reset Procedure and Low-Power Mode Transition in TRAVEO&trade; T2G Family
+- [AN220190](https://www.infineon.com/dgdl/?fileId=8ac78c8c7cdc391c017d0d3a87336756) - How to use RTC in TRAVEO&trade; T2G family
 
 ModusToolbox™ is available online:
 - <https://www.infineon.com/modustoolbox>
@@ -134,7 +138,7 @@ More code examples can be found on the GIT repository:
 - [TRAVEO™ T2G Code examples](https://github.com/orgs/Infineon/repositories?q=mtb-t2g-&type=all&language=&sort=)
 
 For additional trainings, visit our webpage:  
-- [TRAVEO™ T2G trainings](https://www.infineon.com/cms/en/product/microcontroller/32-bit-traveo-t2g-arm-cortex-microcontroller/32-bit-traveo-t2g-arm-cortex-for-body/traveo-t2g-cyt4bf-series/#!trainings)
+- [TRAVEO™ T2G trainings](https://www.infineon.com/cms/en/product/microcontroller/32-bit-traveo-t2g-arm-cortex-microcontroller/32-bit-traveo-t2g-arm-cortex-for-cluster/traveo-t2g-cyt4dn/#!trainings)
 
 For questions and support, use the TRAVEO™ T2G Forum:  
 - <https://community.infineon.com/t5/TRAVEO-T2G/bd-p/TraveoII>  

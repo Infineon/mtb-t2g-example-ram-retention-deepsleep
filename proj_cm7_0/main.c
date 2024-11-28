@@ -1,6 +1,6 @@
 /**********************************************************************************************************************
  * \file main.c
- * \copyright Copyright (C) Infineon Technologies AG 2019
+ * \copyright Copyright (C) Infineon Technologies AG 2024
  *
  * Use of this file is subject to the terms of use agreed between (i) you or the company in which ordinary course of
  * business you are acting and (ii) Infineon Technologies AG or its licensees. If and as long as no such terms of use
@@ -27,22 +27,14 @@
 /*********************************************************************************************************************/
 /*-----------------------------------------------------Includes------------------------------------------------------*/
 /*********************************************************************************************************************/
-#include "cy_pdl.h"
-#include "cyhal.h"
 #include "cybsp.h"
+#include <time.h>
+#include "cy_sysint.h"
+#include <stdio.h>
 #include "cy_retarget_io.h"
-
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
 /*********************************************************************************************************************/
-/* Initial Time and Date definitions */
-#define RTC_INITIAL_DATE_SEC        0u
-#define RTC_INITIAL_DATE_MIN        17u
-#define RTC_INITIAL_DATE_HOUR       16u
-#define RTC_INITIAL_DATE_DAY        4u
-#define RTC_INITIAL_DATE_MONTH      8u
-#define RTC_INITIAL_DATE_YEAR       2023u
-
 /* RTC interrupt priority */
 #define RTC_INTERRUPT_PRIORITY      3u
 
@@ -53,8 +45,8 @@
 #define LONG_DELAY_MS               100u      /* in ms */
 
 /* SRAM Controller1 info */
-#define SRAM_CONTROLLER1_START      ((uint32_t)0x28080000)
-#define SRAM_CONTROLLER1_END        ((uint32_t)0x280BFFFF)
+#define SRAM_CONTROLLER1_START      ((uint32_t)0x28040000)
+#define SRAM_CONTROLLER1_END        ((uint32_t)0x2807FFFF)
 
 /* PWR_MODE Register definitions */
 #define PWR_MODE_RETAINED           0x05FA0002
@@ -62,18 +54,23 @@
 
 /* SRAM1 valid value */
 #define VALID_VAL                   0xA5A5A5A5
-
+#define _RTC_TM_YEAR_BASE           1900
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
 /*********************************************************************************************************************/
-cyhal_rtc_t g_rtcObj;
-
+const cy_stc_sysint_t intrCfg =
+{
+    .intrSrc = srss_interrupt_backup_IRQn,
+    .intrPriority = RTC_INTERRUPT_PRIORITY,
+};
 /*********************************************************************************************************************/
 /*------------------------------------------------Function Prototypes------------------------------------------------*/
 /*********************************************************************************************************************/
 void SetRtcAlarmDateTime(void);
 void PrintDebugString(const char *str);
 void HandleError(void);
+static void RTC_Handler(void);
+void rtc_from_pdl_time(cy_stc_rtc_config_t *pdlTime, const int year, struct tm *time);
 
 /*********************************************************************************************************************/
 /*---------------------------------------------Function Implementations----------------------------------------------*/
@@ -103,13 +100,17 @@ int main(void)
 
     /* Enable global interrupts */
     __enable_irq();
+    /* set interrupt*/
+    Cy_SysInt_Init(&intrCfg,RTC_Handler);
+    Cy_SysInt_EnableSystemInt(intrCfg.intrSrc);
+    IRQn_Type irqn = Cy_SysInt_GetNvicConnection(intrCfg.intrSrc);
+    NVIC_SetPriority(NvicMux0_IRQn, intrCfg.intrPriority);
+    NVIC_ClearPendingIRQ((IRQn_Type)intrCfg.intrSrc);
+    NVIC_EnableIRQ(irqn);
 
-    /* Initialize retarget-io for uart logging */
-    result = cy_retarget_io_init(CYBSP_DEBUG_UART_TX, CYBSP_DEBUG_UART_RX, CY_RETARGET_IO_BAUDRATE);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        HandleError();
-    }
+    Cy_SCB_UART_Init(UART_HW, &UART_config, NULL);
+    Cy_SCB_UART_Enable(UART_HW);
+    cy_retarget_io_init(UART_HW);
 
     /* \x1b[2J\x1b[;H - ANSI ESC sequence for clear screen */
     printf("\x1b[2J\x1b[;H");
@@ -117,30 +118,15 @@ int main(void)
     printf("RAM retention in DeepSleep mode example\r\n");
     printf("********************************************************************************\r\n");
 
-    /* Initialize the System Power Management */
-    cyhal_syspm_init();
-
     /* Initialize RTC */
-    result = cyhal_rtc_init(&g_rtcObj);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        HandleError();
-    }
-
-    /* Update the initialization time and date to the RTC peripheral */
-    result = cyhal_rtc_write_direct(&g_rtcObj, RTC_INITIAL_DATE_SEC, RTC_INITIAL_DATE_MIN,
-                                    RTC_INITIAL_DATE_HOUR, RTC_INITIAL_DATE_DAY,
-                                    RTC_INITIAL_DATE_MONTH, RTC_INITIAL_DATE_YEAR);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        HandleError();
-    }
+    Cy_RTC_SelectClockSource(CY_SYSCLK_BAK_IN_CLKLF);
+    Cy_RTC_Init(&RTCALM_config);
 
     /* Print the current date and time by UART */
     PrintDebugString("Current date and time.\r\n");
 
-    /* Enable the alarm event to trigger an interrupt */
-    cyhal_rtc_enable_event(&g_rtcObj, CYHAL_RTC_ALARM, RTC_INTERRUPT_PRIORITY, true);
+    Cy_RTC_ClearInterrupt(CY_RTC_INTR_ALARM1 | CY_RTC_INTR_ALARM2);
+    Cy_RTC_SetInterruptMask(CY_RTC_INTR_ALARM1 | CY_RTC_INTR_CENTURY);
 
     /* Writing data into SRAM Controller 1 Address space */
     for (uint32_t addr = SRAM_CONTROLLER1_START; addr < SRAM_CONTROLLER1_END; addr += 4)
@@ -151,7 +137,6 @@ int main(void)
     for (;;)
     {
         errCount = 0;
-
         /* Checking SRAM Controller 1 status before setting it to Retention Mode */
         while ((CPUSS->RAM1_STATUS & CPUSS_RAM1_STATUS_WB_EMPTY_Msk) == 0)
         {
@@ -163,32 +148,19 @@ int main(void)
 
         /* Set the RTC generate alarm after 10 seconds */
         SetRtcAlarmDateTime();
-
-        /*
-         * HAL manages whether the conditions of transition to DeepSleep is met,
-         * in this example, especially for UART transmission is finished or not.
-         * So insert some delay until tx fifo becomes empty.
-         */
-        cyhal_system_delay_ms(LONG_DELAY_MS);
-
+        Cy_SysLib_Delay(LONG_DELAY_MS);
         /* Go to deep sleep */
-        result = cyhal_syspm_deepsleep();
-        if (result != CY_RSLT_SUCCESS)
-        {
-            HandleError();
-        }
-
+        Cy_SysPm_CpuEnterDeepSleep(CY_SYSPM_WAIT_FOR_INTERRUPT);
         PrintDebugString("Wakeup from DeepSleep mode\r\n");
 
         /* Setting SRAM in enabled mode */
         CPUSS->RAM1_PWR_CTL = PWR_MODE_ENABLED;
-
+        Cy_SysLib_Delay(LONG_DELAY_MS);
         /* Checking if the data written before reset is retained */
         for (uint32_t addr = SRAM_CONTROLLER1_START; addr < SRAM_CONTROLLER1_END; addr += 4)
         {
             data = *(uint32_t*)addr;
-            if (data != VALID_VAL)
-            {
+            if (data != VALID_VAL){
                 errCount++;
             }
         }
@@ -217,17 +189,39 @@ int main(void)
  */
 void SetRtcAlarmDateTime(void)
 {
-    cy_rslt_t result;
 
     /* Print the RTC alarm time by UART */
     PrintDebugString("RTC alarm will be generated after 10 seconds\r\n");
 
     /* Set the RTC alarm for the specified number of seconds in the future */
-    result = cyhal_rtc_set_alarm_by_seconds(&g_rtcObj, 10);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        HandleError();
-    }
+    cy_stc_rtc_config_t currentTime;
+    cy_stc_rtc_alarm_t alarmTime;
+
+    uint32_t savedIntrStatus = Cy_SysLib_EnterCriticalSection();
+    Cy_RTC_GetDateAndTime(&currentTime);
+    Cy_SysLib_ExitCriticalSection(savedIntrStatus);
+
+    int newSec = currentTime.sec + 10;
+    int overflowMin = newSec / 60;
+    newSec = newSec % 60;
+
+    /* configure alarm*/
+    alarmTime.sec = newSec;
+    alarmTime.secEn = CY_RTC_ALARM_ENABLE;
+    alarmTime.min = currentTime.min + overflowMin;
+    alarmTime.minEn = CY_RTC_ALARM_DISABLE;
+    alarmTime.hour = currentTime.hour;
+    alarmTime.hourEn = CY_RTC_ALARM_DISABLE;
+    alarmTime.dayOfWeek = currentTime.dayOfWeek;
+    alarmTime.dayOfWeekEn = CY_RTC_ALARM_DISABLE;
+    alarmTime.date = currentTime.date;
+    alarmTime.dateEn = CY_RTC_ALARM_DISABLE;
+    alarmTime.month = currentTime.month;
+    alarmTime.monthEn = CY_RTC_ALARM_DISABLE;
+    alarmTime.almEn = CY_RTC_ALARM_ENABLE;
+
+    while(Cy_RTC_SetAlarmDateAndTime(&alarmTime,CY_RTC_ALARM_1) != CY_RET_SUCCESS);
+
 }
 
 /**********************************************************************************************************************
@@ -244,15 +238,12 @@ void PrintDebugString(const char *str)
 {
     struct tm currentDateTime = {0};
     char buffer[STRING_BUFFER_SIZE];
-    cy_rslt_t result;
 
     /* Get the current time and date from the RTC peripheral */
-    result = cyhal_rtc_read(&g_rtcObj, &currentDateTime);
-    if (result != CY_RSLT_SUCCESS)
-    {
-        HandleError();
-    }
-
+    cy_stc_rtc_config_t dateTime = { .hrFormat = CY_RTC_24_HOURS };
+    Cy_RTC_GetDateAndTime(&dateTime);
+    const int year = (int)(dateTime.year + 2000u);
+    rtc_from_pdl_time(&dateTime, year, &currentDateTime);
     /* strftime() is a C library function which is used to format date and time into string.
      * It comes under the header file "time.h" which is included by HAL (See
      * http://www.cplusplus.com/reference/ctime/strftime/)
@@ -281,4 +272,25 @@ void HandleError(void)
     CY_ASSERT(0);
 }
 
+/** Wrapper around the PDL RTC interrupt handler to adapt the function signature */
+static void RTC_Handler(void)
+{
+    cy_stc_rtc_dst_t const *dstTime = 0;
+    Cy_RTC_Interrupt(dstTime, false);
+}
+void rtc_from_pdl_time(cy_stc_rtc_config_t *pdlTime, const int year, struct tm *time)
+{
+   /* The number of days that precede each month of the year, not including Feb 29 */
+    static const uint16_t CUMULATIVE_DAYS[] = {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334};
+    time->tm_sec = (int)pdlTime->sec;
+    time->tm_min = (int)pdlTime->min;
+    time->tm_hour = (int)pdlTime->hour;
+    time->tm_mday = (int)pdlTime->date;
+    time->tm_mon = (int)(pdlTime->month - 1u);
+    time->tm_year = (int)(year - _RTC_TM_YEAR_BASE);
+    time->tm_wday = (int)(pdlTime->dayOfWeek - 1u);
+    time->tm_yday = (int)CUMULATIVE_DAYS[time->tm_mon] + (int)pdlTime->date - 1 +
+        (((int)(pdlTime->month) >= 3 && (int)(Cy_RTC_IsLeapYear((uint32_t)year) ? 1u : 0u)));
+    time->tm_isdst = -1;
+}
 /* [] END OF FILE */

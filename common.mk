@@ -31,7 +31,7 @@ MTB_TYPE=PROJECT
 # configurations. If TARGET is manually edited, ensure TARGET_<BSP>.mtb with a
 # valid URL exists in the application, run 'make getlibs' to fetch BSP contents
 # and update or regenerate launch configurations for your IDE.
-TARGET=APP_KIT_T2G-B-H_LITE
+TARGET=APP_KIT_T2G_C-2D-6M_LITE
 
 # Name of toolchain to use. Options include:
 #
