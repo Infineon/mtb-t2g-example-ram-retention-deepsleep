@@ -1,6 +1,6 @@
 /**********************************************************************************************************************
  * \file main.c
- * \copyright Copyright (C) Infineon Technologies AG 2024
+ * \copyright Copyright (C) Infineon Technologies AG 2019
  *
  * Use of this file is subject to the terms of use agreed between (i) you or the company in which ordinary course of
  * business you are acting and (ii) Infineon Technologies AG or its licensees. If and as long as no such terms of use
@@ -27,11 +27,12 @@
 /*********************************************************************************************************************/
 /*-----------------------------------------------------Includes------------------------------------------------------*/
 /*********************************************************************************************************************/
+#include "cy_pdl.h"
 #include "cybsp.h"
 #include <time.h>
-#include "cy_sysint.h"
-#include <stdio.h>
 #include "cy_retarget_io.h"
+#include "mtb_hal.h"
+
 /*********************************************************************************************************************/
 /*------------------------------------------------------Macros-------------------------------------------------------*/
 /*********************************************************************************************************************/
@@ -55,13 +56,18 @@
 /* SRAM1 valid value */
 #define VALID_VAL                   0xA5A5A5A5
 #define _RTC_TM_YEAR_BASE           1900
+
+/* For the Retarget -IO (Debug UART) usage */
+static cy_stc_scb_uart_context_t    UART_context;          /** UART context */
+static mtb_hal_uart_t               UART_hal_obj;          /** Debug UART HAL object */
+
 /*********************************************************************************************************************/
 /*-------------------------------------------------Global variables--------------------------------------------------*/
 /*********************************************************************************************************************/
 const cy_stc_sysint_t intrCfg =
 {
-    .intrSrc = srss_interrupt_backup_IRQn,
-    .intrPriority = RTC_INTERRUPT_PRIORITY,
+    .intrSrc = ((NvicMux3_IRQn << CY_SYSINT_INTRSRC_MUXIRQ_SHIFT) | srss_interrupt_backup_IRQn),
+    .intrPriority = RTC_INTERRUPT_PRIORITY
 };
 /*********************************************************************************************************************/
 /*------------------------------------------------Function Prototypes------------------------------------------------*/
@@ -98,19 +104,45 @@ int main(void)
         CY_ASSERT(0);
     }
 
+    /* Disable instruction and data cache. */
+    SCB_DisableDCache();
+    SCB_DisableICache();
+
     /* Enable global interrupts */
     __enable_irq();
+
     /* set interrupt*/
     Cy_SysInt_Init(&intrCfg,RTC_Handler);
-    Cy_SysInt_EnableSystemInt(intrCfg.intrSrc);
-    IRQn_Type irqn = Cy_SysInt_GetNvicConnection(intrCfg.intrSrc);
-    NVIC_SetPriority(NvicMux0_IRQn, intrCfg.intrPriority);
-    NVIC_ClearPendingIRQ((IRQn_Type)intrCfg.intrSrc);
-    NVIC_EnableIRQ(irqn);
+    NVIC_ClearPendingIRQ(NvicMux3_IRQn);
+    NVIC_EnableIRQ((IRQn_Type) NvicMux3_IRQn);
 
-    Cy_SCB_UART_Init(UART_HW, &UART_config, NULL);
+    /* Debug UART init */
+    result = (cy_rslt_t)Cy_SCB_UART_Init(UART_HW, &UART_config, &UART_context);
+
+    /* UART init failed. Stop program execution */
+    if (result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
+
     Cy_SCB_UART_Enable(UART_HW);
-    cy_retarget_io_init(UART_HW);
+
+    /* Setup the HAL UART */
+    result = mtb_hal_uart_setup(&UART_hal_obj, &UART_hal_config, &UART_context, NULL);
+
+    /* HAL UART init failed. Stop program execution */
+    if (result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
+
+    result = cy_retarget_io_init(&UART_hal_obj);
+
+    /* HAL retarget_io init failed. Stop program execution */
+    if (result != CY_RSLT_SUCCESS)
+    {
+        CY_ASSERT(0);
+    }
 
     /* \x1b[2J\x1b[;H - ANSI ESC sequence for clear screen */
     printf("\x1b[2J\x1b[;H");
